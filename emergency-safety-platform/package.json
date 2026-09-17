@@ -1,0 +1,20 @@
+{
+  "name": "emergency-safety-platform",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "postinstall": "npm run build --workspace=packages/types",
+    "build:types": "npm run build --workspace=packages/types",
+    "dev:api": "npm run dev --workspace=apps/api",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "prisma:generate": "npm run prisma:generate --workspace=apps/api",
+    "prisma:migrate": "npm run prisma:migrate --workspace=apps/api",
+    "prisma:seed": "npm run prisma:seed --workspace=apps/api",
+    "test:api": "npm run test --workspace=apps/api",
+    "build": "npm run build:types && npm run build --workspace=apps/api && npm run build --workspace=apps/web"
+  }
+}

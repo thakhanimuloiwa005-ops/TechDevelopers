@@ -1,0 +1,297 @@
+// Emergency Safety and Incident Response Ecosystem — database schema
+// Every simulated-hardware table is explicitly commented SIMULATED so the
+// boundary where real IoT integration would plug in later is unambiguous.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  phone        String?
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  emergencyKeywords EmergencyKeyword[]
+  trustedMembersOut TrustedMember[]     @relation("OwnerTrustedMembers")
+  incidents         Incident[]
+  notifications     Notification[]
+  wearableDevices   WearableDevice[]
+  locations         Location[]
+  auditLogs         AuditLog[]
+
+  @@index([email])
+}
+
+model EmergencyKeyword {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  keyword   String
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+enum TrustedMemberStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+model TrustedMember {
+  id           String              @id @default(uuid())
+  ownerId      String
+  owner        User                @relation("OwnerTrustedMembers", fields: [ownerId], references: [id], onDelete: Cascade)
+  memberUserId String?
+  name         String
+  email        String
+  phone        String?
+  relationship String
+  priority     Int                 @default(1)
+  enabled      Boolean             @default(true)
+  status       TrustedMemberStatus @default(PENDING)
+  invitedAt    DateTime            @default(now())
+  respondedAt  DateTime?
+  createdAt    DateTime            @default(now())
+
+  acknowledgedIncidents Incident[] @relation("AcknowledgedBy")
+  respondingIncidents   Incident[] @relation("RespondingBy")
+
+  @@index([ownerId])
+}
+
+enum IncidentStatus {
+  STANDBY
+  ACTIVATED
+  EVIDENCE_COLLECTING
+  TRUSTED_NOTIFIED
+  ACKNOWLEDGED
+  RESPONDING
+  ESCALATED
+  RESOLVED
+  CANCELLED
+}
+
+enum IncidentPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ActivationMethod {
+  KEYWORD
+  WEARABLE_BUTTON
+  PHONE_BUTTON
+  VOICE_SIMULATED
+  FALL_DETECTION
+  SENSOR_TRIGGER
+  MANUAL_DEMO
+}
+
+model Incident {
+  id                String           @id @default(uuid())
+  userId            String
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activationMethod  ActivationMethod
+  activationDetail  String
+  status            IncidentStatus   @default(ACTIVATED)
+  priority          IncidentPriority @default(HIGH)
+  demoMode          Boolean          @default(false)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  resolvedAt        DateTime?
+  resolutionNotes   String?
+
+  acknowledgedById  String?
+  acknowledgedBy    TrustedMember?   @relation("AcknowledgedBy", fields: [acknowledgedById], references: [id])
+  respondingById    String?
+  respondingBy      TrustedMember?   @relation("RespondingBy", fields: [respondingById], references: [id])
+
+  events    IncidentEvent[]
+  evidence  Evidence[]
+  locations Location[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model IncidentEvent {
+  id         String   @id @default(uuid())
+  incidentId String
+  incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  label      String
+  detail     String?
+  occurredAt DateTime @default(now())
+
+  @@index([incidentId, occurredAt])
+}
+
+enum EvidenceType {
+  AUDIO
+  IMAGE
+  VIDEO
+  LOCATION
+  SENSOR
+  DEVICE_INFO
+}
+
+enum EvidenceStatus {
+  RECORDING
+  PREPARING
+  UPLOADING
+  UPLOADED
+  FAILED
+  RETRYING
+  RECEIVED
+}
+
+// Audio/image/video payloads are SIMULATED (generated text/metadata stand-ins,
+// not real sensor captures) unless simulated=false, which is reserved for the
+// future real-hardware integration path.
+model Evidence {
+  id             String         @id @default(uuid())
+  incidentId     String
+  incident       Incident       @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  type           EvidenceType
+  status         EvidenceStatus @default(RECEIVED)
+  sourceDevice   String
+  simulated      Boolean        @default(true)
+  payloadSummary String
+  sequence       Int
+  capturedAt     DateTime       @default(now())
+
+  @@index([incidentId, sequence])
+}
+
+model Location {
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  incidentId     String?
+  incident       Incident? @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  latitude       Float
+  longitude      Float
+  accuracyMeters Float     @default(15)
+  simulated      Boolean   @default(true)
+  capturedAt     DateTime  @default(now())
+
+  @@index([incidentId, capturedAt])
+  @@index([userId])
+}
+
+enum NotificationType {
+  INCIDENT_CREATED
+  INCIDENT_UPDATED
+  INCIDENT_RESOLVED
+  TRUSTED_MEMBER_INVITE
+  SYSTEM
+}
+
+model Notification {
+  id         String           @id @default(uuid())
+  userId     String
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  incidentId String?
+  type       NotificationType
+  title      String
+  body       String
+  read       Boolean          @default(false)
+  createdAt  DateTime         @default(now())
+
+  @@index([userId, read])
+}
+
+enum WearableConnectionStatus {
+  CONNECTED
+  WEAK
+  DISCONNECTED
+  RECONNECTING
+}
+
+enum MotionState {
+  STATIONARY
+  WALKING
+  RUNNING
+  SUDDEN_MOVEMENT
+  NO_MOVEMENT
+}
+
+enum FallState {
+  NORMAL
+  POSSIBLE_FALL
+  CONFIRMED_FALL
+}
+
+// SIMULATED DEVICE — represents a wearable that does not physically exist.
+// Real hardware would populate the same columns through the same
+// WearableProvider interface (see apps/api/src/modules/wearables/providers).
+model WearableDevice {
+  id                String                    @id @default(uuid())
+  userId            String
+  user              User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name              String                    @default("SafeWatch Demo")
+  deviceType        String                    @default("Smartwatch")
+  simulated         Boolean                   @default(true)
+  connectionStatus  WearableConnectionStatus  @default(CONNECTED)
+  batteryPercent    Int                       @default(100)
+  heartRateBpm      Int?
+  motionState       MotionState               @default(STATIONARY)
+  fallState         FallState                 @default(NORMAL)
+  lastTelemetryAt   DateTime?
+  createdAt         DateTime                  @default(now())
+
+  events WearableEvent[]
+
+  @@index([userId])
+}
+
+enum WearableEventType {
+  FALL
+  HIGH_HEART_RATE
+  EMERGENCY_BUTTON
+  MOVEMENT_DETECTED
+  GPS_UPDATE
+  LOW_BATTERY
+  DEVICE_DISCONNECTED
+  DEVICE_RECONNECTED
+  TELEMETRY_TICK
+}
+
+// DEMO SENSOR readings — generated by the IoT simulator, never real sensors.
+model WearableEvent {
+  id         String            @id @default(uuid())
+  deviceId   String
+  device     WearableDevice    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  incidentId String?
+  type       WearableEventType
+  payload    Json
+  occurredAt DateTime          @default(now())
+
+  @@index([deviceId, occurredAt])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  resource  String
+  result    String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}

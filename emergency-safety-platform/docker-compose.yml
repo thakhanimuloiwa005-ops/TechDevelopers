@@ -1,0 +1,17 @@
+version: "3.9"
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: esp-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: maika
+      MYSQL_DATABASE: emergency_safety
+    ports:
+      - "3306:3306"
+    volumes:
+      - esp-mysql-data:/var/lib/mysql
+
+volumes:
+  esp-mysql-data:
